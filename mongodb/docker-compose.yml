@@ -1,0 +1,54 @@
+version: "3.7"
+
+services:    
+  mongodb-secondary:
+    build:
+      context: mongodb-container
+      args:
+        - MONGO_DIR=/usr/local/mongo/data/db1
+    hostname: mongodb-secondary
+    restart: always
+    container_name: mongodb-secondary
+    environment:
+      - REPLICA_SET=bigdata_lab    
+      - MONGO_PORT=27018
+    volumes:
+      - /d/data/mongo/db1:/usr/local/mongo/data/db1
+    ports:
+      - "27018:27018"
+    networks:
+      uap-net:
+        ipv4_address: 192.168.11.3
+
+  mongodb-primary:
+    build:
+      context: mongodb-container
+      args:
+        - MONGO_DIR=/usr/local/mongo/data/db0      
+    hostname: mongodb-primary
+    restart: always
+    container_name: mongodb-primary
+    environment:
+      - IS_PRIMARY=true
+      - REPLICA_SET=bigdata_lab
+      - MONGO_PORT=27017
+      - MONGO_REPLICAS="mongodb-secondary:27018"
+      - WAIT_TIME=10
+    volumes:
+      - /d/data/mongo/db0:/usr/local/mongo/data/db0
+    ports:
+      - "27017:27017"
+    links:
+      - mongodb-secondary
+    depends_on:
+      - mongodb-secondary        
+    networks:
+      uap-net:
+        ipv4_address: 192.168.11.2
+
+networks:
+  uap-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.11.0/24

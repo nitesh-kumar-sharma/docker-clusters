@@ -1,0 +1,95 @@
+version: '3.7'
+
+services:
+  postgres:
+    image: nikush001/postgres:11.7
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+       - PG_DB=airflow
+       - PG_USER=airflow
+       - PG_PASS=airflow
+    ports:
+      - "5432:5432"
+    networks:
+      airflow-net:
+        ipv4_address: 192.168.10.5
+
+  rabbitmq:
+    image: nikush001/rabbitmq:latest
+    hostname: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "9091:15671"
+      - "9092:15672"
+      - "5672:5672"
+    networks:
+      airflow-net:
+        ipv4_address: 192.168.10.6    
+        
+  airflow-master:
+    image: nikush001/airflow:lastest
+    hostname: airflow-master
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - NODE_TYPE=master
+      - WAIT_FOR_SERVICE=airflow-metastore:5432,airflow-task-queue:5672
+      - EXECUTOR=CeleryExecutor
+      - DAG_SCAN_INTERVAL=120 #Seconds
+      - SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-metastore:5432/airflow
+      - RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-metastore:5432/airflow
+      - BROKER_URL=amqp://guest:guest@airflow-task-queue:5672/
+    volumes:
+      - /d/data/airflow/master/logs:/usr/local/airflow/logs
+      - /d/data/airflow/master/dags:/usr/local/airflow/dags
+    ports:
+      - "8080:8080"
+      - "5555:5555"
+    links:
+      - postgres:airflow-metastore
+      - rabbitmq:airflow-task-queue
+    networks:
+      airflow-net:
+        ipv4_address: 192.168.10.7
+
+  airflow-worker-1:
+    image: airflow-local
+    hostname: airflow-worker-1
+    restart: unless-stopped
+    depends_on:
+      - airflow-master
+#    env_file:
+#      - web-variables.env      
+    environment:
+      - NODE_TYPE=worker
+      - WAIT_FOR_SERVICE=airflow-master:8080
+      - EXECUTOR=CeleryExecutor
+      - DAG_SCAN_INTERVAL=120 #Seconds
+      - SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-metastore:5432/airflow
+      - RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-metastore:5432/airflow
+      - BROKER_URL=amqp://guest:guest@airflow-task-queue:5672/
+    volumes:
+      - /d/data/airflow/worker-1/logs:/usr/local/airflow/logs
+      - /d/data/airflow/worker-1/dags:/usr/local/airflow/dags
+    links:
+      - postgres:airflow-metastore
+      - rabbitmq:airflow-task-queue
+    networks:
+      airflow-net:
+        ipv4_address: 192.168.10.8     
+
+volumes:
+  postgres_data:
+    driver: local
+    name: postgres_data
+        
+networks:
+  airflow-net:
+    name: airflow-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.10.0/24
